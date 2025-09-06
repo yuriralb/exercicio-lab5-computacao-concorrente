@@ -1,6 +1,8 @@
 /* Disciplina: Programacao Concorrente */
 /* Prof.: Silvana Rossetto */
-/* Codigo: Comunicação entre threads usando variável compartilhada e exclusao mutua com bloqueio */
+/* Codigo: Alteração no codigo do lab 4 para fazer o print corretamente de todos os valores de soma */
+/* Nome: Yuri Rocha de Albuquerque */
+/* DRE: 123166143 */
 
 #include <stdio.h>
 #include <stdlib.h>
