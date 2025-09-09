@@ -10,27 +10,39 @@
 
 long int soma = 0; //variavel compartilhada entre as threads
 int nthreads; //transformada em global para controle do while da função extra
-pthread_mutex_t mutex; //variavel de lock para exclusao mutua
-pthread_cond_t cond; //variavel que inicializa a fila
-
+int nthreads_ativas; //quantidade de threads ativas no momento
+int nthreads_fila = 0; //quantidade de threads na fila no momento
+pthread_mutex_t mutex; //variavel de lock para exclusao mutua da soma
+pthread_mutex_t mutex_treads_ativas; //variavel de lock para exclusao mutua do numero de threads ativas
+pthread_cond_t cond_soma; //variavel que inicializa a fila das threads que incrementam soma
+pthread_cond_t cond_printa; //variavel que inciializa fila da thread que printa soma
 
 //funcao executada pelas threads
 void *ExecutaTarefa (void *arg) {
   long int id = (long int) arg;
   //printf("Thread : %ld esta executando...\n", id);
 
-  for (int i=0; i<100000; i++) {
-     //--entrada na SC
-     pthread_mutex_lock(&mutex);
-     //--SC (seção critica)
+  for (int i=0; i<100001; i++) {
+    //--entrada na SC
+    pthread_mutex_lock(&mutex);
+    //--SC (seção critica)
 
-     if (soma % 1000 == 0) {
-       pthread_cond_wait(&cond, &mutex); //tranca a thread se soma for divisível por 1000
-     }
+    if (soma % 1000 == 0) {
+      nthreads_fila++;
+      //printf("Thread %ld entrou na fila\n", id);
+      if (nthreads_fila == nthreads_ativas) {
+        pthread_cond_signal(&cond_printa);
+      }
+      pthread_cond_wait(&cond_soma, &mutex);
+    }
 
-     soma++; //incrementa a variavel compartilhada
-     pthread_mutex_unlock(&mutex);
+    soma++; //incrementa a variavel compartilhada
+    pthread_mutex_unlock(&mutex);
   }
+
+  pthread_mutex_lock(&mutex_treads_ativas);
+  nthreads_ativas -= 1; //decrementa caso a thread tenha saído do for loop
+  pthread_mutex_unlock(&mutex_treads_ativas);
   //printf("Thread : %ld terminou!\n", id);
   pthread_exit(NULL);
 }
@@ -41,15 +53,15 @@ void *extra (void *args) {
   //somente um valor por vez e também para controle do while
   const long int MAX_VAL = nthreads*100000; //máximo valor é quando todas as threads
   //tiverem contribuído para a soma 100 mil vezes
-
   while (soma_local < MAX_VAL) {
     pthread_mutex_lock(&mutex);
-    if (soma % 1000 == 0) { //imprime se 'soma' for multiplo de 1000
-      if (soma != soma_local) { //checa se o valor ja foi printado
-        printf("soma = %ld \n", soma);
-      }
-      soma_local = soma;
-      pthread_cond_broadcast(&cond);
+    //printf("Thread PRINTA começou a executar!\n");
+    printf("soma = %ld \n", soma);
+    soma_local = soma;
+    nthreads_fila = 0;
+    pthread_cond_broadcast(&cond_soma); //libera todos da fila
+    if (soma < MAX_VAL) { //checa se soma ja atingiu o limite para evitar loop infinito
+      pthread_cond_wait(&cond_printa, &mutex); //libera o mutex para as threads de soma e entra na fila
     }
     pthread_mutex_unlock(&mutex);
   }
@@ -66,14 +78,16 @@ int main(int argc, char *argv[]) {
       return 1;
    }
    nthreads = atoi(argv[1]);
-
+   nthreads_ativas = nthreads;
    //--aloca as estruturas
    tid = (pthread_t*) malloc(sizeof(pthread_t)*(nthreads+1));
    if(tid==NULL) {puts("ERRO--malloc"); return 2;}
 
    //--inicilaiza o mutex (lock de exclusao mutua)
    pthread_mutex_init(&mutex, NULL);
-   pthread_cond_init(&cond, NULL);
+   pthread_mutex_init(&mutex_treads_ativas, NULL);
+   pthread_cond_init(&cond_soma, NULL);
+   pthread_cond_init(&cond_printa, NULL);
 
    //--cria as threads
    for(long int t=0; t<nthreads; t++) {
@@ -96,8 +110,8 @@ int main(int argc, char *argv[]) {
 
    //--finaliza o mutex
    pthread_mutex_destroy(&mutex);
-   pthread_cond_destroy(&cond);
-   printf("Valor de 'soma' = %ld\n", soma);
-
+   pthread_mutex_destroy(&mutex_treads_ativas);
+   pthread_cond_destroy(&cond_soma);
+   pthread_cond_destroy(&cond_printa);
    return 0;
 }
